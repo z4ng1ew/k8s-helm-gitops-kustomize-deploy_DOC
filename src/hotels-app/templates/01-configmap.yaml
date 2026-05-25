@@ -21,3 +21,44 @@ data:
   LOYALTY_SERVICE_PORT: "8085"
   REPORT_SERVICE_HOST: report-service
   REPORT_SERVICE_PORT: "8086"
+
+
+
+
+
+
+
+
+# Построчный комментарий к ConfigMap
+
+```yaml
+apiVersion: v1                                    # Версия API Kubernetes для данного объекта (стабильная core API)
+kind: ConfigMap                                   # Тип ресурса — ConfigMap (хранилище конфигурации в виде пар ключ-значение)
+metadata:                                         # Блок метаданных объекта
+  name: app-config                                # Имя ConfigMap, по которому к нему обращаются Pod'ы и Deployment'ы
+data:                                             # Раздел с данными конфигурации (переменными окружения для сервисов)
+  POSTGRES_HOST: postgres                         # DNS-имя сервиса PostgreSQL внутри кластера Kubernetes
+  POSTGRES_PORT: "5432"                           # Стандартный порт PostgreSQL (строка, т.к. ConfigMap хранит только строки)
+  RABBIT_MQ_HOST: rabbitmq                        # Имя сервиса брокера сообщений RabbitMQ
+  RABBIT_MQ_PORT: "5672"                          # Порт AMQP-протокола для подключения к RabbitMQ
+  RABBIT_MQ_QUEUE_NAME: booking_statistics_queue  # Имя очереди для сбора статистики бронирований
+  RABBIT_MQ_EXCHANGE: booking_statistics_exchange # Имя exchange (точки обмена) для маршрутизации сообщений в очередь
+  SESSION_SERVICE_HOST: session-service           # Хост микросервиса аутентификации/сессий (JWT, авторизация)
+  SESSION_SERVICE_PORT: "8081"                    # Порт сервиса сессий
+  HOTEL_SERVICE_HOST: hotel-service               # Хост микросервиса управления отелями и номерами
+  HOTEL_SERVICE_PORT: "8082"                      # Порт сервиса отелей
+  BOOKING_SERVICE_HOST: booking-service           # Хост микросервиса бронирования (Gateway/оркестратор бизнес-логики)
+  BOOKING_SERVICE_PORT: "8083"                    # Порт сервиса бронирования
+  PAYMENT_SERVICE_HOST: payment-service           # Хост микросервиса платежей
+  PAYMENT_SERVICE_PORT: "8084"                    # Порт сервиса платежей
+  LOYALTY_SERVICE_HOST: loyalty-service           # Хост микросервиса программы лояльности (скидки, статусы клиентов)
+  LOYALTY_SERVICE_PORT: "8085"                    # Порт сервиса лояльности
+  REPORT_SERVICE_HOST: report-service             # Хост микросервиса отчётности (потребитель сообщений из RabbitMQ)
+  REPORT_SERVICE_PORT: "8086"                     # Порт сервиса отчётов
+```
+
+---
+
+# Монолог для защиты (~300 символов)
+
+> Для централизованного хранения конфигурации микросервисов я использовал Kubernetes ConfigMap `app-config`. В нём вынесены хосты и порты всех сервисов: Session, Hotel, Booking, Payment, Loyalty, Report, а также параметры PostgreSQL и RabbitMQ. Это позволяет менять настройки без пересборки образов и обеспечивает service discovery по DNS-именам внутри кластера.
