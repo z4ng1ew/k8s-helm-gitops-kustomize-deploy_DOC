@@ -1,0 +1,29 @@
+replicaCount:
+  postgres: 1
+  rabbitmq: 1
+  session: 1
+  hotel: 1
+  booking: 1
+  payment: 1
+  loyalty: 1
+  report: 1
+  gateway: 2
+
+image:
+  pullPolicy: Never
+  postgres: src-postgres:latest
+  rabbitmq: rabbitmq:3.12-management-alpine
+  session: src-session-service:latest
+  hotel: src-hotel-service:latest
+  booking: src-booking-service:latest
+  payment: src-payment-service:latest
+  loyalty: src-loyalty-service:latest
+  report: src-report-service:latest
+  gateway: src-gateway-service:latest
+
+ingress:
+  enabled: true
+  sessionHost: session.10.174.8.95.nip.io
+  gatewayHost: gateway.10.174.8.95.nip.io
+  tlsSecret: wildcard-nipio-tls
+  clusterIssuer: my-ca-issuer

@@ -1,0 +1,758 @@
+apiVersion: v1
+data:
+  BOOKING_SERVICE_HOST: booking-service
+  BOOKING_SERVICE_PORT: "8083"
+  HOTEL_SERVICE_HOST: hotel-service
+  HOTEL_SERVICE_PORT: "8082"
+  LOYALTY_SERVICE_HOST: loyalty-service
+  LOYALTY_SERVICE_PORT: "8085"
+  PAYMENT_SERVICE_HOST: payment-service
+  PAYMENT_SERVICE_PORT: "8084"
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  RABBIT_MQ_EXCHANGE: booking_statistics_exchange
+  RABBIT_MQ_HOST: rabbitmq
+  RABBIT_MQ_PORT: "5672"
+  RABBIT_MQ_QUEUE_NAME: booking_statistics_queue
+  REPORT_SERVICE_HOST: report-service
+  REPORT_SERVICE_PORT: "8086"
+  SESSION_SERVICE_HOST: session-service
+  SESSION_SERVICE_PORT: "8081"
+kind: ConfigMap
+metadata:
+  name: app-config
+---
+apiVersion: v1
+data:
+  BOOKING_SERVICE_UUID: OTExY2NiNGMtYzA1NS0xMWViLTg1MjktMDI0MmFjMTMwMDAz
+  GATEWAY_SERVICE_UUID: YjUxY2VkYTItYmZhNS0xMWViLTg1MjktMDI0MmFjMTMwMDAz
+  POSTGRES_PASSWORD: cG9zdGdyZXM=
+  POSTGRES_USER: cG9zdGdyZXM=
+  RABBIT_MQ_PASSWORD: Z3Vlc3Q=
+  RABBIT_MQ_USER: Z3Vlc3Q=
+kind: Secret
+metadata:
+  name: app-secrets
+type: Opaque
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: booking-service
+  name: booking-service
+spec:
+  ports:
+  - port: 8083
+    targetPort: 8083
+  selector:
+    app: booking-service
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: gateway-service
+  name: gateway-service
+spec:
+  ports:
+  - port: 8087
+    targetPort: 8087
+  selector:
+    app: gateway-service
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: hotel-service
+  name: hotel-service
+spec:
+  ports:
+  - port: 8082
+    targetPort: 8082
+  selector:
+    app: hotel-service
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: loyalty-service
+  name: loyalty-service
+spec:
+  ports:
+  - port: 8085
+    targetPort: 8085
+  selector:
+    app: loyalty-service
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: payment-service
+  name: payment-service
+spec:
+  ports:
+  - port: 8084
+    targetPort: 8084
+  selector:
+    app: payment-service
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: postgres
+  name: postgres
+spec:
+  clusterIP: None
+  ports:
+  - port: 5432
+    targetPort: 5432
+  selector:
+    app: postgres
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: rabbitmq
+  name: rabbitmq
+spec:
+  clusterIP: None
+  ports:
+  - name: amqp
+    port: 5672
+    targetPort: 5672
+  - name: management
+    port: 15672
+    targetPort: 15672
+  selector:
+    app: rabbitmq
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: report-service
+  name: report-service
+spec:
+  ports:
+  - port: 8086
+    targetPort: 8086
+  selector:
+    app: report-service
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: session-service
+  name: session-service
+spec:
+  ports:
+  - port: 8081
+    targetPort: 8081
+  selector:
+    app: session-service
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  labels:
+    app: postgres
+    type: local
+  name: postgres-pv
+spec:
+  accessModes:
+  - ReadWriteOnce
+  capacity:
+    storage: 5Gi
+  hostPath:
+    path: /var/lib/postgres-pv
+    type: DirectoryOrCreate
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - k3s-master
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: booking-service
+  name: booking-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: booking-service
+  template:
+    metadata:
+      labels:
+        app: booking-service
+    spec:
+      containers:
+      - env:
+        - name: POSTGRES_HOST
+          valueFrom:
+            configMapKeyRef:
+              key: POSTGRES_HOST
+              name: app-config
+        - name: POSTGRES_PORT
+          valueFrom:
+            configMapKeyRef:
+              key: POSTGRES_PORT
+              name: app-config
+        - name: POSTGRES_DB
+          value: reservations_db
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              key: POSTGRES_USER
+              name: app-secrets
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: POSTGRES_PASSWORD
+              name: app-secrets
+        - name: RABBIT_MQ_HOST
+          valueFrom:
+            configMapKeyRef:
+              key: RABBIT_MQ_HOST
+              name: app-config
+        - name: RABBIT_MQ_PORT
+          valueFrom:
+            configMapKeyRef:
+              key: RABBIT_MQ_PORT
+              name: app-config
+        - name: RABBIT_MQ_QUEUE_NAME
+          valueFrom:
+            configMapKeyRef:
+              key: RABBIT_MQ_QUEUE_NAME
+              name: app-config
+        - name: RABBIT_MQ_EXCHANGE
+          valueFrom:
+            configMapKeyRef:
+              key: RABBIT_MQ_EXCHANGE
+              name: app-config
+        - name: RABBIT_MQ_USER
+          valueFrom:
+            secretKeyRef:
+              key: RABBIT_MQ_USER
+              name: app-secrets
+        - name: RABBIT_MQ_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: RABBIT_MQ_PASSWORD
+              name: app-secrets
+        - name: HOTEL_SERVICE_HOST
+          valueFrom:
+            configMapKeyRef:
+              key: HOTEL_SERVICE_HOST
+              name: app-config
+        - name: HOTEL_SERVICE_PORT
+          valueFrom:
+            configMapKeyRef:
+              key: HOTEL_SERVICE_PORT
+              name: app-config
+        - name: PAYMENT_SERVICE_HOST
+          valueFrom:
+            configMapKeyRef:
+              key: PAYMENT_SERVICE_HOST
+              name: app-config
+        - name: PAYMENT_SERVICE_PORT
+          valueFrom:
+            configMapKeyRef:
+              key: PAYMENT_SERVICE_PORT
+              name: app-config
+        - name: LOYALTY_SERVICE_HOST
+          valueFrom:
+            configMapKeyRef:
+              key: LOYALTY_SERVICE_HOST
+              name: app-config
+        - name: LOYALTY_SERVICE_PORT
+          valueFrom:
+            configMapKeyRef:
+              key: LOYALTY_SERVICE_PORT
+              name: app-config
+        image: src-booking-service:latest
+        imagePullPolicy: Never
+        name: booking-service
+        ports:
+        - containerPort: 8083
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: gateway-service
+  name: gateway-service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: gateway-service
+  template:
+    metadata:
+      labels:
+        app: gateway-service
+    spec:
+      containers:
+      - env:
+        - name: SESSION_SERVICE_HOST
+          valueFrom:
+            configMapKeyRef:
+              key: SESSION_SERVICE_HOST
+              name: app-config
+        - name: SESSION_SERVICE_PORT
+          valueFrom:
+            configMapKeyRef:
+              key: SESSION_SERVICE_PORT
+              name: app-config
+        - name: HOTEL_SERVICE_HOST
+          valueFrom:
+            configMapKeyRef:
+              key: HOTEL_SERVICE_HOST
+              name: app-config
+        - name: HOTEL_SERVICE_PORT
+          valueFrom:
+            configMapKeyRef:
+              key: HOTEL_SERVICE_PORT
+              name: app-config
+        - name: BOOKING_SERVICE_HOST
+          valueFrom:
+            configMapKeyRef:
+              key: BOOKING_SERVICE_HOST
+              name: app-config
+        - name: BOOKING_SERVICE_PORT
+          valueFrom:
+            configMapKeyRef:
+              key: BOOKING_SERVICE_PORT
+              name: app-config
+        - name: LOYALTY_SERVICE_HOST
+          valueFrom:
+            configMapKeyRef:
+              key: LOYALTY_SERVICE_HOST
+              name: app-config
+        - name: LOYALTY_SERVICE_PORT
+          valueFrom:
+            configMapKeyRef:
+              key: LOYALTY_SERVICE_PORT
+              name: app-config
+        - name: REPORT_SERVICE_HOST
+          valueFrom:
+            configMapKeyRef:
+              key: REPORT_SERVICE_HOST
+              name: app-config
+        - name: REPORT_SERVICE_PORT
+          valueFrom:
+            configMapKeyRef:
+              key: REPORT_SERVICE_PORT
+              name: app-config
+        image: src-gateway-service:latest
+        imagePullPolicy: Never
+        name: gateway-service
+        ports:
+        - containerPort: 8087
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: hotel-service
+  name: hotel-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hotel-service
+  template:
+    metadata:
+      labels:
+        app: hotel-service
+    spec:
+      containers:
+      - env:
+        - name: POSTGRES_HOST
+          valueFrom:
+            configMapKeyRef:
+              key: POSTGRES_HOST
+              name: app-config
+        - name: POSTGRES_PORT
+          valueFrom:
+            configMapKeyRef:
+              key: POSTGRES_PORT
+              name: app-config
+        - name: POSTGRES_DB
+          value: hotels_db
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              key: POSTGRES_USER
+              name: app-secrets
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: POSTGRES_PASSWORD
+              name: app-secrets
+        image: src-hotel-service:latest
+        imagePullPolicy: Never
+        name: hotel-service
+        ports:
+        - containerPort: 8082
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: loyalty-service
+  name: loyalty-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loyalty-service
+  template:
+    metadata:
+      labels:
+        app: loyalty-service
+    spec:
+      containers:
+      - env:
+        - name: POSTGRES_HOST
+          valueFrom:
+            configMapKeyRef:
+              key: POSTGRES_HOST
+              name: app-config
+        - name: POSTGRES_PORT
+          valueFrom:
+            configMapKeyRef:
+              key: POSTGRES_PORT
+              name: app-config
+        - name: POSTGRES_DB
+          value: balances_db
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              key: POSTGRES_USER
+              name: app-secrets
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: POSTGRES_PASSWORD
+              name: app-secrets
+        image: src-loyalty-service:latest
+        imagePullPolicy: Never
+        name: loyalty-service
+        ports:
+        - containerPort: 8085
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: payment-service
+  name: payment-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+    spec:
+      containers:
+      - env:
+        - name: POSTGRES_HOST
+          valueFrom:
+            configMapKeyRef:
+              key: POSTGRES_HOST
+              name: app-config
+        - name: POSTGRES_PORT
+          valueFrom:
+            configMapKeyRef:
+              key: POSTGRES_PORT
+              name: app-config
+        - name: POSTGRES_DB
+          value: payments_db
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              key: POSTGRES_USER
+              name: app-secrets
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: POSTGRES_PASSWORD
+              name: app-secrets
+        image: src-payment-service:latest
+        imagePullPolicy: Never
+        name: payment-service
+        ports:
+        - containerPort: 8084
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: report-service
+  name: report-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: report-service
+  template:
+    metadata:
+      labels:
+        app: report-service
+    spec:
+      containers:
+      - env:
+        - name: POSTGRES_HOST
+          valueFrom:
+            configMapKeyRef:
+              key: POSTGRES_HOST
+              name: app-config
+        - name: POSTGRES_PORT
+          valueFrom:
+            configMapKeyRef:
+              key: POSTGRES_PORT
+              name: app-config
+        - name: POSTGRES_DB
+          value: statistics_db
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              key: POSTGRES_USER
+              name: app-secrets
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: POSTGRES_PASSWORD
+              name: app-secrets
+        - name: RABBIT_MQ_HOST
+          valueFrom:
+            configMapKeyRef:
+              key: RABBIT_MQ_HOST
+              name: app-config
+        - name: RABBIT_MQ_PORT
+          valueFrom:
+            configMapKeyRef:
+              key: RABBIT_MQ_PORT
+              name: app-config
+        - name: RABBIT_MQ_QUEUE_NAME
+          valueFrom:
+            configMapKeyRef:
+              key: RABBIT_MQ_QUEUE_NAME
+              name: app-config
+        - name: RABBIT_MQ_EXCHANGE
+          valueFrom:
+            configMapKeyRef:
+              key: RABBIT_MQ_EXCHANGE
+              name: app-config
+        - name: RABBIT_MQ_USER
+          valueFrom:
+            secretKeyRef:
+              key: RABBIT_MQ_USER
+              name: app-secrets
+        - name: RABBIT_MQ_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: RABBIT_MQ_PASSWORD
+              name: app-secrets
+        image: src-report-service:latest
+        imagePullPolicy: Never
+        name: report-service
+        ports:
+        - containerPort: 8086
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: session-service
+  name: session-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: session-service
+  template:
+    metadata:
+      labels:
+        app: session-service
+    spec:
+      containers:
+      - env:
+        - name: POSTGRES_HOST
+          valueFrom:
+            configMapKeyRef:
+              key: POSTGRES_HOST
+              name: app-config
+        - name: POSTGRES_PORT
+          valueFrom:
+            configMapKeyRef:
+              key: POSTGRES_PORT
+              name: app-config
+        - name: POSTGRES_DB
+          value: users_db
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              key: POSTGRES_USER
+              name: app-secrets
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: POSTGRES_PASSWORD
+              name: app-secrets
+        image: src-session-service:latest
+        imagePullPolicy: Never
+        name: session-service
+        ports:
+        - containerPort: 8081
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: postgres
+  name: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  serviceName: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - env:
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              key: POSTGRES_USER
+              name: app-secrets
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: POSTGRES_PASSWORD
+              name: app-secrets
+        - name: POSTGRES_DB
+          value: postgres
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        image: src-postgres:latest
+        imagePullPolicy: Never
+        name: postgres
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: postgres-storage
+      nodeSelector:
+        kubernetes.io/hostname: k3s-master
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-storage
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 5Gi
+      storageClassName: manual
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: rabbitmq
+  name: rabbitmq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq
+  serviceName: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+    spec:
+      containers:
+      - env:
+        - name: RABBITMQ_DEFAULT_USER
+          valueFrom:
+            secretKeyRef:
+              key: RABBIT_MQ_USER
+              name: app-secrets
+        - name: RABBITMQ_DEFAULT_PASS
+          valueFrom:
+            secretKeyRef:
+              key: RABBIT_MQ_PASSWORD
+              name: app-secrets
+        image: rabbitmq:3.12-management-alpine
+        imagePullPolicy: Never
+        name: rabbitmq
+        ports:
+        - containerPort: 5672
+        - containerPort: 15672
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: my-ca-issuer
+  name: app-ingress
+  namespace: default
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: session.10.174.8.95.nip.io
+    http:
+      paths:
+      - backend:
+          service:
+            name: session-service
+            port:
+              number: 8081
+        path: /
+        pathType: Prefix
+  - host: gateway.10.174.8.95.nip.io
+    http:
+      paths:
+      - backend:
+          service:
+            name: gateway-service
+            port:
+              number: 8087
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - session.10.174.8.95.nip.io
+    - gateway.10.174.8.95.nip.io
+    secretName: wildcard-nipio-tls
