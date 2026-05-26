@@ -33,3 +33,57 @@ spec:
                 name: gateway-service
                 port:
                   number: 8087
+
+
+
+
+
+
+
+
+
+# Построчный комментарий к Ingress (Kustomize base)
+
+```yaml
+apiVersion: networking.k8s.io/v1                  # Версия API Kubernetes для Ingress (стабильная networking/v1)
+kind: Ingress                                     # Тип ресурса — Ingress (маршрутизация внешнего HTTP/HTTPS-трафика в кластер)
+metadata:
+  name: app-ingress                               # Имя Ingress-ресурса
+  namespace: default                              # Пространство имён, в котором создаётся Ingress (default — по умолчанию)
+  annotations:                                    # Аннотации для расширенной настройки
+    cert-manager.io/cluster-issuer: my-ca-issuer  # Указание cert-manager автоматически выпустить TLS-сертификат через ClusterIssuer "my-ca-issuer" (собственный CA)
+spec:
+  ingressClassName: nginx                         # Класс Ingress-контроллера — NGINX (обрабатывает данное правило маршрутизации)
+  tls:                                            # Раздел TLS-конфигурации (HTTPS)
+    - hosts:                                      # Список доменов, для которых выпускается сертификат
+        - session.10.174.8.95.nip.io              # Домен сервиса аутентификации (nip.io — wildcard DNS, резолвится в IP 10.174.8.95)
+        - gateway.10.174.8.95.nip.io              # Домен API Gateway (единая точка входа в систему)
+      secretName: wildcard-nipio-tls              # Имя Secret'а, куда cert-manager сохранит TLS-сертификат и приватный ключ
+  rules:                                          # Правила маршрутизации входящего трафика
+    - host: session.10.174.8.95.nip.io            # Правило для домена сервиса сессий
+      http:
+        paths:
+          - path: /                               # Префикс пути (все запросы на этот домен)
+            pathType: Prefix                      # Тип сопоставления — префиксное (Prefix-matching)
+            backend:                              # Целевой backend-сервис
+              service:
+                name: session-service             # Имя внутреннего Service Kubernetes
+                port:
+                  number: 8081                    # Порт Service, на который пробрасывается трафик
+    - host: gateway.10.174.8.95.nip.io            # Правило для домена API Gateway
+      http:
+        paths:
+          - path: /                               # Префикс пути (все запросы)
+            pathType: Prefix                      # Префиксное сопоставление пути
+            backend:
+              service:
+                name: gateway-service             # Имя Service для Gateway
+                port:
+                  number: 8087                    # Порт Gateway-сервиса
+```
+
+---
+
+# Монолог для защиты (~300 символов)
+
+> Ingress в базовой конфигурации Kustomize организует внешний доступ к системе через NGINX Ingress Controller. Он маршрутизирует HTTPS-трафик на два публичных endpoint'а: домен сервиса сессий для аутентификации и домен API Gateway для всех остальных операций. Использование nip.io обеспечивает wildcard DNS без необходимости регистрировать собственный домен — поддомены автоматически резолвятся в указанный IP-адрес 10.174.8.95. Все остальные микросервисы остаются недоступны извне благодаря типу ClusterIP, что повышает безопасность. TLS-сертификаты автоматически выпускаются и обновляются через cert-manager с использованием ClusterIssuer my-ca-issuer.

@@ -40,3 +40,61 @@ spec:
     - port: 8081
       targetPort: 8081
   type: ClusterIP
+
+
+
+
+
+
+# Построчный комментарий к Deployment и Service session-service (Kustomize base)
+
+```yaml
+apiVersion: apps/v1                               # Версия API для контроллеров приложений
+kind: Deployment                                  # Тип ресурса — Deployment (stateless-приложение с поддержкой rolling-updates)
+metadata:
+  name: session-service                           # Имя Deployment
+  labels: { app: session-service }                # Метка для идентификации (запись в одну строку)
+spec:
+  replicas: 1                                     # Количество реплик сервиса (одна в базовой конфигурации)
+  selector:
+    matchLabels: { app: session-service }         # Селектор Pod'ов, которыми управляет Deployment
+  template:                                       # Шаблон создаваемых Pod'ов
+    metadata:
+      labels: { app: session-service }            # Метки Pod'ов (должны совпадать с селектором)
+    spec:
+      containers:
+        - name: session-service                   # Имя контейнера внутри Pod'а
+          image: src-session-service:latest       # Локально собранный Docker-образ сервиса
+          imagePullPolicy: Never                  # Использовать только локальный образ (актуально для k3s без registry)
+          ports:
+            - containerPort: 8081                 # Порт, на котором приложение слушает внутри контейнера
+          env:                                    # Переменные окружения — параметры подключения к БД
+            - name: POSTGRES_HOST
+              valueFrom: { configMapKeyRef: { name: app-config, key: POSTGRES_HOST } }    # Хост БД из ConfigMap
+            - name: POSTGRES_PORT
+              valueFrom: { configMapKeyRef: { name: app-config, key: POSTGRES_PORT } }    # Порт БД из ConfigMap
+            - name: POSTGRES_DB
+              value: users_db                     # Имя базы данных сервиса сессий (хранит пользователей)
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: app-secrets, key: POSTGRES_USER } }      # Логин БД из Secret
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: app-secrets, key: POSTGRES_PASSWORD } }  # Пароль БД из Secret
+---
+apiVersion: v1                                    # Версия API Kubernetes для Service
+kind: Service                                     # Тип ресурса — Service (сетевая абстракция для Pod'ов)
+metadata:
+  name: session-service                           # Имя сервиса (используется другими сервисами для обращения через DNS)
+  labels: { app: session-service }                # Метка сервиса
+spec:
+  selector: { app: session-service }              # Селектор: направляет трафик на Pod'ы с меткой app=session-service
+  ports:
+    - port: 8081                                  # Порт Service (внешний для других Pod'ов)
+      targetPort: 8081                            # Порт контейнера, куда пробрасывается трафик
+  type: ClusterIP                                 # Тип ClusterIP — доступ только внутри кластера (внешний доступ через Ingress)
+```
+
+---
+
+# Монолог для защиты (~300 символов)
+
+> Session-service в базовой конфигурации Kustomize отвечает за аутентификацию пользователей и управление сессиями. Я развернул его как Deployment, поскольку сервис stateless — всё состояние хранится в отдельной базе users_db, реализующей паттерн Database per Service. Параметры подключения к PostgreSQL берутся из ConfigMap (хост, порт), а учётные данные — из Secret через secretKeyRef, что соответствует принципу разделения конфигурации и секретов. Service типа ClusterIP делает сервис доступным только внутри кластера через DNS-имя session-service:8081. Внешний доступ обеспечивается через Ingress, который проксирует запросы на этот сервис.

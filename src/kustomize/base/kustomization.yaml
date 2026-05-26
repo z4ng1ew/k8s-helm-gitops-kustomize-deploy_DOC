@@ -13,3 +13,33 @@ resources:
   - 11-report-service.yaml
   - 12-gateway-service.yaml
   - 13-app-ingress.yaml
+
+
+
+
+
+# Построчный комментарий к kustomization.yaml (base)
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1       # Версия API Kustomize (стабильная v1beta1) для описания конфигурации
+kind: Kustomization                               # Тип ресурса — Kustomization (декларативная сборка манифестов)
+
+resources:                                        # Список ресурсов, включаемых в базовую сборку (порядок отражает зависимости развёртывания)
+  - 03-postgres-pv.yaml                           # PersistentVolume для PostgreSQL (создаётся первым — хранилище для БД)
+  - 04-postgres.yaml                              # StatefulSet и Service PostgreSQL (зависят от PV)
+  - 05-rabbitmq.yaml                              # StatefulSet и Service RabbitMQ (брокер сообщений)
+  - 06-session-service.yaml                       # Deployment и Service сервиса аутентификации
+  - 07-hotel-service.yaml                         # Deployment и Service сервиса управления отелями
+  - 08-booking-service.yaml                       # Deployment и Service сервиса бронирования (оркестратор)
+  - 09-payment-service.yaml                       # Deployment и Service сервиса платежей
+  - 10-loyalty-service.yaml                       # Deployment и Service сервиса программы лояльности
+  - 11-report-service.yaml                        # Deployment и Service сервиса отчётности (consumer RabbitMQ)
+  - 12-gateway-service.yaml                       # Deployment и Service API Gateway (единая точка входа)
+  - 13-app-ingress.yaml                           # Ingress для внешнего доступа к Gateway и Session-сервису
+```
+
+---
+
+# Монолог для защиты (~300 символов)
+
+> Базовый kustomization.yaml агрегирует все манифесты микросервисной системы в единую сборку. Ресурсы перечислены в логическом порядке по зависимостям: сначала инфраструктурные компоненты (PV, PostgreSQL, RabbitMQ), затем бизнес-сервисы (Session, Hotel, Booking, Payment, Loyalty, Report), потом Gateway как единая точка входа и наконец Ingress для внешнего доступа. Хотя Kubernetes сам разрешает зависимости через контроллеры, такой порядок улучшает читаемость и понимание архитектуры. ConfigMap и Secrets не включены в базу — они вынесены в overlay'и, что позволяет переопределять их для каждого окружения без изменения базовой конфигурации.

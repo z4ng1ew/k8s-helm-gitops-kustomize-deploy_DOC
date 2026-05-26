@@ -50,3 +50,78 @@ spec:
     - port: 8087
       targetPort: 8087
   type: ClusterIP
+
+
+
+
+
+
+
+
+# Построчный комментарий к Deployment и Service gateway-service (Kustomize base)
+
+```yaml
+apiVersion: apps/v1                               # Версия API для контроллеров приложений
+kind: Deployment                                  # Тип ресурса — Deployment (stateless-приложение)
+metadata:
+  name: gateway-service                           # Имя Deployment
+  labels: { app: gateway-service }                # Метка для идентификации
+spec:
+  replicas: 1                                     # Количество реплик в базовой конфигурации (увеличивается до 3 в overlay production через patch)
+  selector:
+    matchLabels: { app: gateway-service }         # Селектор Pod'ов, которыми управляет Deployment
+  template:                                       # Шаблон создаваемых Pod'ов
+    metadata:
+      labels: { app: gateway-service }            # Метки Pod'ов (должны совпадать с селектором)
+    spec:
+      containers:
+        - name: gateway-service                   # Имя контейнера внутри Pod'а
+          image: src-gateway-service:latest       # Локально собранный Docker-образ Gateway
+          imagePullPolicy: Never                  # Использовать только локальный образ (актуально для k3s без registry)
+          ports:
+            - containerPort: 8087                 # Порт Gateway внутри контейнера (единая точка входа в систему)
+          env:                                    # Переменные окружения — адреса всех проксируемых сервисов
+            # --- Session-service (аутентификация и авторизация) ---
+            - name: SESSION_SERVICE_HOST
+              valueFrom: { configMapKeyRef: { name: app-config, key: SESSION_SERVICE_HOST } }  # Хост сервиса сессий из ConfigMap
+            - name: SESSION_SERVICE_PORT
+              valueFrom: { configMapKeyRef: { name: app-config, key: SESSION_SERVICE_PORT } }  # Порт сервиса сессий
+            # --- Hotel-service (информация об отелях) ---
+            - name: HOTEL_SERVICE_HOST
+              valueFrom: { configMapKeyRef: { name: app-config, key: HOTEL_SERVICE_HOST } }    # Хост сервиса отелей
+            - name: HOTEL_SERVICE_PORT
+              valueFrom: { configMapKeyRef: { name: app-config, key: HOTEL_SERVICE_PORT } }    # Порт сервиса отелей
+            # --- Booking-service (оркестратор бронирований) ---
+            - name: BOOKING_SERVICE_HOST
+              valueFrom: { configMapKeyRef: { name: app-config, key: BOOKING_SERVICE_HOST } }  # Хост сервиса бронирований
+            - name: BOOKING_SERVICE_PORT
+              valueFrom: { configMapKeyRef: { name: app-config, key: BOOKING_SERVICE_PORT } }  # Порт сервиса бронирований
+            # --- Loyalty-service (программа лояльности) ---
+            - name: LOYALTY_SERVICE_HOST
+              valueFrom: { configMapKeyRef: { name: app-config, key: LOYALTY_SERVICE_HOST } }  # Хост сервиса лояльности
+            - name: LOYALTY_SERVICE_PORT
+              valueFrom: { configMapKeyRef: { name: app-config, key: LOYALTY_SERVICE_PORT } }  # Порт сервиса лояльности
+            # --- Report-service (статистика и отчёты) ---
+            - name: REPORT_SERVICE_HOST
+              valueFrom: { configMapKeyRef: { name: app-config, key: REPORT_SERVICE_HOST } }   # Хост сервиса отчётов
+            - name: REPORT_SERVICE_PORT
+              valueFrom: { configMapKeyRef: { name: app-config, key: REPORT_SERVICE_PORT } }   # Порт сервиса отчётов
+---
+apiVersion: v1                                    # Версия API Kubernetes для Service
+kind: Service                                     # Тип ресурса — Service (сетевая абстракция для Pod'ов)
+metadata:
+  name: gateway-service                           # Имя сервиса Gateway
+  labels: { app: gateway-service }                # Метка сервиса
+spec:
+  selector: { app: gateway-service }              # Селектор: направляет трафик на Pod'ы с меткой app=gateway-service
+  ports:
+    - port: 8087                                  # Порт Service (внешний для других Pod'ов и Ingress)
+      targetPort: 8087                            # Порт контейнера, куда пробрасывается трафик
+  type: ClusterIP                                 # Тип ClusterIP — внешний доступ обеспечивается через Ingress
+```
+
+---
+
+# Монолог для защиты (~300 символов)
+
+> Gateway-service в базовой конфигурации Kustomize реализует архитектурный паттерн API Gateway — единую точку входа для всех внешних клиентов. Он маршрутизирует запросы на внутренние микросервисы (Session, Hotel, Booking, Loyalty, Report), скрывая сложность распределённой системы и обеспечивая централизованную аутентификацию через Session-сервис. Это повышает безопасность: все внутренние сервисы развёрнуты как ClusterIP и недоступны извне напрямую. Адреса всех сервисов вынесены в ConfigMap, что позволяет менять конфигурацию без пересборки образа. В базе одна реплика, в overlay production количество увеличивается до трёх через strategic merge patch для обеспечения отказоустойчивости.

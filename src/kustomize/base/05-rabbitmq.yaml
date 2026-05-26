@@ -45,3 +45,68 @@ spec:
               valueFrom: { secretKeyRef: { name: app-secrets, key: RABBIT_MQ_USER } }
             - name: RABBITMQ_DEFAULT_PASS
               valueFrom: { secretKeyRef: { name: app-secrets, key: RABBIT_MQ_PASSWORD } }
+
+
+
+
+
+
+
+
+# Построчный комментарий к Service и StatefulSet RabbitMQ (Kustomize base)
+
+```yaml
+apiVersion: v1                                    # Версия API Kubernetes (core/v1) для Service
+kind: Service                                     # Тип ресурса — Service (сетевая абстракция для доступа к Pod'ам)
+metadata:
+  name: rabbitmq                                  # Имя сервиса (по нему другие микросервисы обращаются к брокеру)
+  labels:
+    app: rabbitmq                                 # Метка для идентификации сервиса
+spec:
+  clusterIP: None                                 # Headless Service — DNS возвращает IP конкретных Pod'ов (требуется для StatefulSet)
+  selector:
+    app: rabbitmq                                 # Селектор Pod'ов: трафик идёт на Pod'ы с меткой app=rabbitmq
+  ports:
+    - name: amqp                                  # Именованный порт для AMQP-протокола (используется приложениями)
+      port: 5672                                  # Порт Service для AMQP
+      targetPort: 5672                            # Порт контейнера, на который пробрасывается трафик
+    - name: management                            # Именованный порт для management UI (веб-интерфейс администрирования)
+      port: 15672                                 # Порт Service для веб-панели
+      targetPort: 15672                           # Порт контейнера с management plugin
+---
+apiVersion: apps/v1                               # Версия API для контроллеров приложений
+kind: StatefulSet                                 # StatefulSet — для stateful-приложения со стабильной идентичностью Pod'ов
+metadata:
+  name: rabbitmq                                  # Имя StatefulSet
+  labels:
+    app: rabbitmq                                 # Метка приложения
+spec:
+  serviceName: rabbitmq                           # Имя headless-сервиса для DNS-идентификации Pod'ов (rabbitmq-0.rabbitmq)
+  replicas: 1                                     # Одна реплика брокера (без кластеризации RabbitMQ)
+  selector:
+    matchLabels:
+      app: rabbitmq                               # Селектор Pod'ов, которыми управляет StatefulSet
+  template:                                       # Шаблон Pod'ов
+    metadata:
+      labels:
+        app: rabbitmq                             # Метки Pod'ов (должны совпадать с селектором)
+    spec:
+      containers:
+        - name: rabbitmq                          # Имя контейнера
+          image: rabbitmq:3.12-management-alpine  # Официальный образ RabbitMQ 3.12 с management plugin на базе Alpine
+          imagePullPolicy: Never                  # Использовать только локальный образ (актуально для k3s без registry)
+          ports:
+            - containerPort: 5672                 # Порт AMQP внутри контейнера
+            - containerPort: 15672                # Порт management UI внутри контейнера
+          env:                                    # Переменные окружения для инициализации брокера
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom: { secretKeyRef: { name: app-secrets, key: RABBIT_MQ_USER } }      # Логин администратора из Secret
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom: { secretKeyRef: { name: app-secrets, key: RABBIT_MQ_PASSWORD } }  # Пароль администратора из Secret
+```
+
+---
+
+# Монолог для защиты (~300 символов)
+
+> RabbitMQ в базовой конфигурации Kustomize развёрнут как StatefulSet с headless Service для обеспечения стабильной сетевой идентичности и асинхронного взаимодействия микросервисов. Открыты два порта: 5672 для AMQP-протокола, по которому Booking-сервис публикует события о бронированиях, а Report-сервис их потребляет, и 15672 — для management UI с веб-интерфейсом администрирования и мониторинга очередей. Используется официальный образ rabbitmq:3.12-management-alpine с предустановленным management plugin. Учётные данные пробрасываются из Secret через переменные RABBITMQ_DEFAULT_USER и RABBITMQ_DEFAULT_PASS, что обеспечивает разделение конфигурации и секретов.

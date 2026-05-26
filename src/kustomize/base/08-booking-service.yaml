@@ -64,3 +64,90 @@ spec:
     - port: 8083
       targetPort: 8083
   type: ClusterIP
+
+
+
+
+
+
+# Построчный комментарий к Deployment и Service booking-service (Kustomize base)
+
+```yaml
+apiVersion: apps/v1                               # Версия API для контроллеров приложений
+kind: Deployment                                  # Тип ресурса — Deployment (stateless-приложение)
+metadata:
+  name: booking-service                           # Имя Deployment
+  labels: { app: booking-service }                # Метка для идентификации
+spec:
+  replicas: 1                                     # Количество реплик (одна в базовой конфигурации)
+  selector:
+    matchLabels: { app: booking-service }         # Селектор Pod'ов, которыми управляет Deployment
+  template:                                       # Шаблон Pod'ов
+    metadata:
+      labels: { app: booking-service }            # Метки Pod'ов (совпадают с селектором)
+    spec:
+      containers:
+        - name: booking-service                   # Имя контейнера
+          image: src-booking-service:latest       # Локально собранный Docker-образ
+          imagePullPolicy: Never                  # Использовать только локальный образ (k3s без registry)
+          ports:
+            - containerPort: 8083                 # Порт приложения внутри контейнера
+          env:                                    # Переменные окружения для всех интеграций сервиса
+            # --- Подключение к собственной БД ---
+            - name: POSTGRES_HOST
+              valueFrom: { configMapKeyRef: { name: app-config, key: POSTGRES_HOST } }    # Хост БД из ConfigMap
+            - name: POSTGRES_PORT
+              valueFrom: { configMapKeyRef: { name: app-config, key: POSTGRES_PORT } }    # Порт БД из ConfigMap
+            - name: POSTGRES_DB
+              value: reservations_db              # Собственная БД сервиса бронирований (Database per Service)
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: app-secrets, key: POSTGRES_USER } }      # Логин БД из Secret
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: app-secrets, key: POSTGRES_PASSWORD } }  # Пароль БД из Secret
+            # --- Подключение к брокеру сообщений RabbitMQ (publisher) ---
+            - name: RABBIT_MQ_HOST
+              valueFrom: { configMapKeyRef: { name: app-config, key: RABBIT_MQ_HOST } }   # Хост RabbitMQ из ConfigMap
+            - name: RABBIT_MQ_PORT
+              valueFrom: { configMapKeyRef: { name: app-config, key: RABBIT_MQ_PORT } }   # Порт RabbitMQ из ConfigMap
+            - name: RABBIT_MQ_QUEUE_NAME
+              valueFrom: { configMapKeyRef: { name: app-config, key: RABBIT_MQ_QUEUE_NAME } }  # Имя очереди для публикации событий
+            - name: RABBIT_MQ_EXCHANGE
+              valueFrom: { configMapKeyRef: { name: app-config, key: RABBIT_MQ_EXCHANGE } }    # Имя exchange для маршрутизации
+            - name: RABBIT_MQ_USER
+              valueFrom: { secretKeyRef: { name: app-secrets, key: RABBIT_MQ_USER } }     # Логин RabbitMQ из Secret
+            - name: RABBIT_MQ_PASSWORD
+              valueFrom: { secretKeyRef: { name: app-secrets, key: RABBIT_MQ_PASSWORD } } # Пароль RabbitMQ из Secret
+            # --- Интеграция с Hotel-сервисом (проверка доступности номеров) ---
+            - name: HOTEL_SERVICE_HOST
+              valueFrom: { configMapKeyRef: { name: app-config, key: HOTEL_SERVICE_HOST } }    # Хост Hotel-сервиса
+            - name: HOTEL_SERVICE_PORT
+              valueFrom: { configMapKeyRef: { name: app-config, key: HOTEL_SERVICE_PORT } }    # Порт Hotel-сервиса
+            # --- Интеграция с Payment-сервисом (проведение платежей) ---
+            - name: PAYMENT_SERVICE_HOST
+              valueFrom: { configMapKeyRef: { name: app-config, key: PAYMENT_SERVICE_HOST } }  # Хост Payment-сервиса
+            - name: PAYMENT_SERVICE_PORT
+              valueFrom: { configMapKeyRef: { name: app-config, key: PAYMENT_SERVICE_PORT } }  # Порт Payment-сервиса
+            # --- Интеграция с Loyalty-сервисом (применение скидок) ---
+            - name: LOYALTY_SERVICE_HOST
+              valueFrom: { configMapKeyRef: { name: app-config, key: LOYALTY_SERVICE_HOST } }  # Хост Loyalty-сервиса
+            - name: LOYALTY_SERVICE_PORT
+              valueFrom: { configMapKeyRef: { name: app-config, key: LOYALTY_SERVICE_PORT } }  # Порт Loyalty-сервиса
+---
+apiVersion: v1                                    # Версия API Kubernetes для Service
+kind: Service                                     # Тип ресурса — Service
+metadata:
+  name: booking-service                           # Имя сервиса
+  labels: { app: booking-service }                # Метка сервиса
+spec:
+  selector: { app: booking-service }              # Селектор Pod'ов
+  ports:
+    - port: 8083                                  # Порт Service
+      targetPort: 8083                            # Порт контейнера
+  type: ClusterIP                                 # Доступ только внутри кластера
+```
+
+---
+
+# Монолог для защиты (~300 символов)
+
+> Booking-service в базовой конфигурации Kustomize — центральный оркестратор бизнес-логики, реализующий процесс бронирования номеров. Он интегрируется с Hotel-сервисом для проверки доступности, с Payment-сервисом для проведения оплаты, с Loyalty-сервисом для применения скидок, а также публикует события в RabbitMQ для асинхронной обработки статистики Report-сервисом. Такая архитектура комбинирует синхронные REST-вызовы и асинхронный обмен сообщениями. Все адреса сервисов и параметры брокера вынесены в ConfigMap, секреты — в Secret. Собственная БД reservations_db реализует паттерн Database per Service, обеспечивая независимость и слабую связанность микросервисов.

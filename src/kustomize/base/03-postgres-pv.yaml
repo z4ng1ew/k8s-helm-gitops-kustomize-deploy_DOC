@@ -23,3 +23,43 @@ spec:
               operator: In
               values:
                 - k3s-master
+
+
+
+
+
+# Построчный комментарий к PersistentVolume (Kustomize base)
+
+```yaml
+apiVersion: v1                                    # Версия API Kubernetes (core/v1) для объекта PersistentVolume
+kind: PersistentVolume                            # Тип ресурса — PV (постоянное хранилище на уровне кластера)
+metadata:
+  name: postgres-pv                               # Имя PersistentVolume в кластере
+  labels:                                         # Метки для идентификации и связи с PVC через selector
+    type: local                                   # Метка: тип хранилища — локальное (на узле)
+    app: postgres                                 # Метка: принадлежность к приложению PostgreSQL
+spec:                                             # Спецификация PersistentVolume
+  storageClassName: manual                        # Класс хранилища "manual" — ручное управление (без динамического provisioning)
+  capacity:                                       # Раздел описания ёмкости тома
+    storage: 5Gi                                  # Выделено 5 гигабайт под данные PostgreSQL
+  accessModes:                                    # Режимы доступа к тому
+    - ReadWriteOnce                               # RWO — том может быть смонтирован на чтение/запись только одним узлом
+  persistentVolumeReclaimPolicy: Retain           # Политика хранения: при удалении PVC данные сохраняются (не удаляются автоматически)
+  hostPath:                                       # Тип тома — hostPath (директория на файловой системе узла)
+    path: /var/lib/postgres-pv                    # Путь на узле, где физически хранятся данные БД
+    type: DirectoryOrCreate                       # Если директории нет — она будет создана автоматически
+  nodeAffinity:                                   # Привязка тома к конкретному узлу кластера (обязательна для hostPath)
+    required:                                     # Жёсткое (обязательное) правило привязки
+      nodeSelectorTerms:                          # Список условий выбора узла
+        - matchExpressions:                       # Условия совпадения по меткам узла
+            - key: kubernetes.io/hostname         # Ключ — стандартная метка hostname узла
+              operator: In                        # Оператор: значение должно входить в список
+              values:
+                - k3s-master                      # Том привязан к узлу с именем "k3s-master"
+```
+
+---
+
+# Монолог для защиты (~300 символов)
+
+> PersistentVolume в базовой конфигурации Kustomize обеспечивает постоянное хранилище для PostgreSQL объёмом 5Gi. Я использовал тип hostPath, подходящий для кластера k3s, где данные физически хранятся в директории /var/lib/postgres-pv на узле. Режим ReadWriteOnce соответствует stateful-приложению с одним писателем. Политика Retain критична для БД — даже при удалении PVC данные не теряются, что предотвращает случайную потерю информации. Через nodeAffinity том жёстко привязан к узлу k3s-master, поскольку hostPath хранит данные локально на конкретной ноде, и Pod должен запускаться именно там. Класс manual означает связывание с PVC без динамического provisioning.
