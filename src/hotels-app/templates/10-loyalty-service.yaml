@@ -40,3 +40,60 @@ spec:
     - port: 8085
       targetPort: 8085
   type: ClusterIP
+
+
+
+
+
+# Построчный комментарий к Deployment и Service loyalty-service
+
+```yaml
+apiVersion: apps/v1                               # Версия API для контроллеров приложений
+kind: Deployment                                  # Тип ресурса — Deployment (stateless-приложение)
+metadata:
+  name: loyalty-service                           # Имя Deployment
+  labels: { app: loyalty-service }                # Метка для идентификации
+spec:
+  replicas: {{ .Values.replicaCount.loyalty }}    # Количество реплик из values.yaml (Helm-шаблонизация)
+  selector:
+    matchLabels: { app: loyalty-service }         # Селектор Pod'ов, которыми управляет Deployment
+  template:                                       # Шаблон создаваемых Pod'ов
+    metadata:
+      labels: { app: loyalty-service }            # Метки Pod'ов (должны совпадать с селектором)
+    spec:
+      containers:
+        - name: loyalty-service                   # Имя контейнера внутри Pod'а
+          image: {{ .Values.image.loyalty }}      # Docker-образ сервиса из values.yaml
+          imagePullPolicy: {{ .Values.image.pullPolicy }}  # Политика загрузки образа
+          ports:
+            - containerPort: 8085                 # Порт приложения внутри контейнера
+          env:                                    # Переменные окружения для подключения к БД
+            - name: POSTGRES_HOST
+              valueFrom: { configMapKeyRef: { name: app-config, key: POSTGRES_HOST } }    # Хост БД из ConfigMap
+            - name: POSTGRES_PORT
+              valueFrom: { configMapKeyRef: { name: app-config, key: POSTGRES_PORT } }    # Порт БД из ConfigMap
+            - name: POSTGRES_DB
+              value: balances_db                  # Собственная БД сервиса лояльности (хранит балансы и статусы клиентов)
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: app-secrets, key: POSTGRES_USER } }      # Логин БД из Secret
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: app-secrets, key: POSTGRES_PASSWORD } }  # Пароль БД из Secret
+---
+apiVersion: v1                                    # Версия API Kubernetes для Service
+kind: Service                                     # Тип ресурса — Service (сетевая абстракция для Pod'ов)
+metadata:
+  name: loyalty-service                           # Имя сервиса (по нему обращается Booking-сервис)
+  labels: { app: loyalty-service }                # Метка сервиса
+spec:
+  selector: { app: loyalty-service }              # Селектор: направляет трафик на Pod'ы с меткой app=loyalty-service
+  ports:
+    - port: 8085                                  # Порт Service (внешний для других Pod'ов)
+      targetPort: 8085                            # Порт контейнера, куда пробрасывается трафик
+  type: ClusterIP                                 # Тип ClusterIP — доступ только внутри кластера
+```
+
+---
+
+# Монолог для защиты (~300 символов)
+
+> Loyalty-service реализует программу лояльности: хранит балансы бонусных баллов, рассчитывает статусы клиентов (Bronze, Silver, Gold) и применяет соответствующие скидки при бронировании. К сервису обращается Booking-сервис в процессе оркестрации заказа для получения размера скидки. Сервис stateless, развёрнут как Deployment с возможностью масштабирования. Данные о балансах клиентов хранятся в собственной БД balances_db, реализуя паттерн Database per Service. Доступ к сервису возможен только внутри кластера через ClusterIP по адресу loyalty-service:8085.

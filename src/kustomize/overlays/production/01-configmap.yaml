@@ -21,3 +21,41 @@ data:
   LOYALTY_SERVICE_PORT: "8085"
   REPORT_SERVICE_HOST: report-service
   REPORT_SERVICE_PORT: "8086"
+
+
+
+
+
+# Построчный комментарий к ConfigMap (Kustomize base)
+
+```yaml
+apiVersion: v1                                    # Версия API Kubernetes (core/v1) для объекта ConfigMap
+kind: ConfigMap                                   # Тип ресурса — ConfigMap (централизованное хранилище конфигурации в виде пар ключ-значение)
+metadata:
+  name: app-config                                # Имя ConfigMap, по которому к нему обращаются Pod'ы через configMapKeyRef или envFrom
+data:                                             # Раздел с данными конфигурации (несекретные параметры окружения)
+  POSTGRES_HOST: postgres                         # DNS-имя сервиса PostgreSQL внутри кластера Kubernetes
+  POSTGRES_PORT: "5432"                           # Стандартный порт PostgreSQL (строковое значение — требование ConfigMap)
+  RABBIT_MQ_HOST: rabbitmq                        # DNS-имя сервиса брокера сообщений RabbitMQ
+  RABBIT_MQ_PORT: "5672"                          # Порт AMQP-протокола для подключения к RabbitMQ
+  RABBIT_MQ_QUEUE_NAME: booking_statistics_queue  # Имя очереди для передачи событий о бронированиях в Report-сервис
+  RABBIT_MQ_EXCHANGE: booking_statistics_exchange # Имя exchange (точки обмена) для маршрутизации сообщений в очередь
+  SESSION_SERVICE_HOST: session-service           # DNS-имя сервиса аутентификации (JWT, сессии пользователей)
+  SESSION_SERVICE_PORT: "8081"                    # Порт session-service
+  HOTEL_SERVICE_HOST: hotel-service               # DNS-имя сервиса управления отелями и номерами
+  HOTEL_SERVICE_PORT: "8082"                      # Порт hotel-service
+  BOOKING_SERVICE_HOST: booking-service           # DNS-имя сервиса бронирования (оркестратор бизнес-логики)
+  BOOKING_SERVICE_PORT: "8083"                    # Порт booking-service
+  PAYMENT_SERVICE_HOST: payment-service           # DNS-имя сервиса платежей
+  PAYMENT_SERVICE_PORT: "8084"                    # Порт payment-service
+  LOYALTY_SERVICE_HOST: loyalty-service           # DNS-имя сервиса программы лояльности (скидки и статусы клиентов)
+  LOYALTY_SERVICE_PORT: "8085"                    # Порт loyalty-service
+  REPORT_SERVICE_HOST: report-service             # DNS-имя сервиса отчётности (consumer сообщений из RabbitMQ)
+  REPORT_SERVICE_PORT: "8086"                     # Порт report-service
+```
+
+---
+
+# Монолог для защиты (~300 символов)
+
+> Этот ConfigMap входит в базовую конфигурацию Kustomize-сборки и содержит все несекретные параметры окружения микросервисов: DNS-имена и порты сервисов, настройки брокера RabbitMQ и параметры подключения к PostgreSQL. Размещение в базе позволяет переиспользовать ConfigMap во всех окружениях (production, staging, dev), а специфичные значения переопределяются через overlays. Service discovery реализован через DNS-имена Kubernetes, что обеспечивает автоматическое разрешение адресов сервисов внутри кластера без жёсткой привязки к IP. Такой подход соответствует принципу 12-factor app — конфигурация вынесена из кода в окружение.

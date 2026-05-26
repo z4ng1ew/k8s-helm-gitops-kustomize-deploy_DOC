@@ -3,3 +3,25 @@ kind: Kustomization
 
 resources:
   - overlays/production
+
+
+
+
+
+
+
+# Построчный комментарий к kustomization.yaml
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1       # Версия API Kustomize (стабильная v1beta1) для описания конфигурации
+kind: Kustomization                               # Тип ресурса — Kustomization (декларативная сборка/наложение манифестов)
+
+resources:                                        # Список ресурсов, включаемых в сборку
+  - overlays/production                           # Подключение overlay-директории production (содержит patches и base-ресурсы для продакшн-окружения)
+```
+
+---
+
+# Монолог для защиты (~300 символов)
+
+> Файл kustomization.yaml служит точкой входа для Kustomize — встроенного в kubectl инструмента для управления манифестами Kubernetes. В отличие от Helm, Kustomize работает без шаблонизации, через наложение патчей на базовые манифесты (overlays). В моём случае корневой kustomization подключает overlay production, что реализует паттерн base + overlays: общие манифесты выносятся в базу, а специфичные для окружения изменения — в overlay'и (production, staging, dev). Это обеспечивает чистое разделение конфигураций под разные окружения и упрощает развёртывание через команду kubectl apply -k.

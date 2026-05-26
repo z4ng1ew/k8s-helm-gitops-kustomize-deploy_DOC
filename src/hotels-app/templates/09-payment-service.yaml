@@ -40,3 +40,70 @@ spec:
     - port: 8084
       targetPort: 8084
   type: ClusterIP
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Построчный комментарий к Deployment и Service payment-service
+
+```yaml
+apiVersion: apps/v1                               # Версия API для контроллеров приложений
+kind: Deployment                                  # Тип ресурса — Deployment (stateless-приложение)
+metadata:
+  name: payment-service                           # Имя Deployment
+  labels: { app: payment-service }                # Метка для идентификации
+spec:
+  replicas: {{ .Values.replicaCount.payment }}    # Количество реплик из values.yaml (Helm-шаблонизация)
+  selector:
+    matchLabels: { app: payment-service }         # Селектор Pod'ов, которыми управляет Deployment
+  template:                                       # Шаблон создаваемых Pod'ов
+    metadata:
+      labels: { app: payment-service }            # Метки Pod'ов (должны совпадать с селектором)
+    spec:
+      containers:
+        - name: payment-service                   # Имя контейнера внутри Pod'а
+          image: {{ .Values.image.payment }}      # Docker-образ сервиса из values.yaml
+          imagePullPolicy: {{ .Values.image.pullPolicy }}  # Политика загрузки образа
+          ports:
+            - containerPort: 8084                 # Порт приложения внутри контейнера
+          env:                                    # Переменные окружения для подключения к БД
+            - name: POSTGRES_HOST
+              valueFrom: { configMapKeyRef: { name: app-config, key: POSTGRES_HOST } }    # Хост БД из ConfigMap
+            - name: POSTGRES_PORT
+              valueFrom: { configMapKeyRef: { name: app-config, key: POSTGRES_PORT } }    # Порт БД из ConfigMap
+            - name: POSTGRES_DB
+              value: payments_db                  # Собственная БД сервиса платежей (Database per Service)
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: app-secrets, key: POSTGRES_USER } }      # Логин БД из Secret
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: app-secrets, key: POSTGRES_PASSWORD } }  # Пароль БД из Secret
+---
+apiVersion: v1                                    # Версия API Kubernetes для Service
+kind: Service                                     # Тип ресурса — Service (сетевая абстракция для Pod'ов)
+metadata:
+  name: payment-service                           # Имя сервиса (по нему обращается Booking-сервис)
+  labels: { app: payment-service }                # Метка сервиса
+spec:
+  selector: { app: payment-service }              # Селектор: направляет трафик на Pod'ы с меткой app=payment-service
+  ports:
+    - port: 8084                                  # Порт Service (внешний для других Pod'ов)
+      targetPort: 8084                            # Порт контейнера, куда пробрасывается трафик
+  type: ClusterIP                                 # Тип ClusterIP — доступ только внутри кластера
+```
+
+---
+
+# Монолог для защиты (~300 символов)
+
+> Payment-service отвечает за проведение платежей при бронировании: создание платежа, изменение статуса, отмену операции. К нему обращается только Booking-сервис в рамках сценария оркестрации бронирования. Сервис stateless, поэтому развёрнут как Deployment с возможностью горизонтального масштабирования. Все транзакции хранятся в отдельной БД payments_db, реализуя паттерн Database per Service. Параметры подключения берутся из ConfigMap, секреты — из Secret. Service типа ClusterIP делает сервис недоступным извне, что критично для безопасности платёжных операций.

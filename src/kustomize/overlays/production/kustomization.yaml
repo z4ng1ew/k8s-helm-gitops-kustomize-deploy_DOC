@@ -11,3 +11,29 @@ patches:
     target:
       kind: Deployment
       name: gateway-service
+
+
+
+# Построчный комментарий к Kustomization overlay (production)
+
+```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1       # Версия API Kustomize (стабильная v1beta1)
+kind: Kustomization                               # Тип ресурса — Kustomization (декларативная сборка манифестов)
+
+resources:                                        # Список ресурсов, включаемых в overlay
+  - ../../base                                    # Подключение базовых манифестов из директории base (общие для всех окружений)
+  - 01-configmap.yaml                             # Дополнительный/переопределённый ConfigMap для production-окружения
+  - 02-secrets.yaml                               # Дополнительные/переопределённые Secrets для production-окружения
+
+patches:                                          # Раздел с патчами — точечные изменения базовых манифестов
+  - path: replicas-patch.yaml                     # Путь к файлу патча (содержит изменения, накладываемые на target)
+    target:                                       # Целевой ресурс, на который накладывается патч
+      kind: Deployment                            # Тип целевого ресурса — Deployment
+      name: gateway-service                       # Имя целевого Deployment — gateway-service (увеличение реплик в production)
+```
+
+---
+
+# Монолог для защиты (~300 символов)
+
+> Overlay production реализует паттерн base + overlays Kustomize. Через resources он подключает базовую конфигурацию из ../../base и добавляет/переопределяет специфичные для production манифесты ConfigMap и Secrets. Раздел patches применяет точечный strategic merge patch к Deployment gateway-service для увеличения количества реплик в production-окружении без дублирования всего манифеста. Такой подход исключает копирование кода, обеспечивает чистое разделение окружений и позволяет легко добавлять новые overlay'и (staging, dev) с минимальными изменениями. Сборка запускается командой kubectl apply -k overlays/production.

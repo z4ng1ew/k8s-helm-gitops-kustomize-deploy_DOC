@@ -34,3 +34,54 @@ spec:
                 port:
                   number: 8087
 {{- end }}
+
+
+
+
+
+# Построчный комментарий к Ingress
+
+```yaml
+{{- if .Values.ingress.enabled }}                 # Условный рендеринг Helm: ресурс создаётся, только если ingress.enabled = true в values.yaml
+apiVersion: networking.k8s.io/v1                  # Версия API Kubernetes для Ingress (стабильная networking/v1)
+kind: Ingress                                     # Тип ресурса — Ingress (маршрутизация внешнего HTTP/HTTPS-трафика в кластер)
+metadata:
+  name: app-ingress                               # Имя Ingress-ресурса
+  annotations:                                    # Аннотации для расширенной настройки
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer }}  # Указание cert-manager автоматически выпустить TLS-сертификат через указанный ClusterIssuer (например, Let's Encrypt)
+spec:
+  ingressClassName: nginx                         # Класс Ingress-контроллера — NGINX (обрабатывает данное правило маршрутизации)
+  tls:                                            # Раздел TLS-конфигурации (HTTPS)
+    - hosts:                                      # Список доменов, для которых выпускается сертификат
+        - {{ .Values.ingress.sessionHost }}       # Домен сервиса аутентификации (из values.yaml)
+        - {{ .Values.ingress.gatewayHost }}       # Домен API Gateway (из values.yaml)
+      secretName: {{ .Values.ingress.tlsSecret }} # Имя Secret'а, куда cert-manager сохранит TLS-сертификат и приватный ключ
+  rules:                                          # Правила маршрутизации входящего трафика
+    - host: {{ .Values.ingress.sessionHost }}     # Правило для домена сервиса сессий
+      http:
+        paths:
+          - path: /                               # Префикс пути (все запросы на этот домен)
+            pathType: Prefix                      # Тип сопоставления — префиксное (Prefix-matching)
+            backend:                              # Целевой backend-сервис
+              service:
+                name: session-service             # Имя внутреннего Service Kubernetes
+                port:
+                  number: 8081                    # Порт Service, на который пробрасывается трафик
+    - host: {{ .Values.ingress.gatewayHost }}     # Правило для домена API Gateway
+      http:
+        paths:
+          - path: /                               # Префикс пути (все запросы)
+            pathType: Prefix                      # Префиксное сопоставление пути
+            backend:
+              service:
+                name: gateway-service             # Имя Service для Gateway
+                port:
+                  number: 8087                    # Порт Gateway-сервиса
+{{- end }}                                        # Закрытие условного блока Helm if
+```
+
+---
+
+# Монолог для защиты (~300 символов)
+
+> Для организации внешнего доступа к системе я использовал Ingress с контроллером NGINX. Он маршрутизирует HTTPS-трафик на два публичных endpoint'а: домен сервиса сессий (для аутентификации) и домен API Gateway (для всех остальных операций). Все остальные микросервисы остаются недоступны извне благодаря типу ClusterIP, что повышает безопасность. TLS-сертификаты автоматически выпускаются и обновляются через cert-manager с использованием ClusterIssuer (Let's Encrypt). Весь блок обёрнут в Helm-условие, что позволяет легко отключать Ingress в dev-окружениях. Хосты и параметры TLS параметризованы через values.yaml для гибкости развёртывания.

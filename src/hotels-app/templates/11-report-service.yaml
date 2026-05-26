@@ -52,3 +52,86 @@ spec:
     - port: 8086
       targetPort: 8086
   type: ClusterIP
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Построчный комментарий к Deployment и Service report-service
+
+```yaml
+apiVersion: apps/v1                               # Версия API для контроллеров приложений
+kind: Deployment                                  # Тип ресурса — Deployment (stateless-приложение)
+metadata:
+  name: report-service                            # Имя Deployment
+  labels: { app: report-service }                 # Метка для идентификации
+spec:
+  replicas: {{ .Values.replicaCount.report }}     # Количество реплик из values.yaml (Helm-шаблонизация)
+  selector:
+    matchLabels: { app: report-service }          # Селектор Pod'ов, которыми управляет Deployment
+  template:                                       # Шаблон создаваемых Pod'ов
+    metadata:
+      labels: { app: report-service }             # Метки Pod'ов (должны совпадать с селектором)
+    spec:
+      containers:
+        - name: report-service                    # Имя контейнера внутри Pod'а
+          image: {{ .Values.image.report }}       # Docker-образ сервиса из values.yaml
+          imagePullPolicy: {{ .Values.image.pullPolicy }}  # Политика загрузки образа
+          ports:
+            - containerPort: 8086                 # Порт приложения внутри контейнера
+          env:                                    # Переменные окружения для всех зависимостей сервиса
+            # --- Подключение к собственной БД ---
+            - name: POSTGRES_HOST
+              valueFrom: { configMapKeyRef: { name: app-config, key: POSTGRES_HOST } }    # Хост БД из ConfigMap
+            - name: POSTGRES_PORT
+              valueFrom: { configMapKeyRef: { name: app-config, key: POSTGRES_PORT } }    # Порт БД из ConfigMap
+            - name: POSTGRES_DB
+              value: statistics_db                # Собственная БД сервиса отчётов (хранит агрегированную статистику)
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: app-secrets, key: POSTGRES_USER } }      # Логин БД из Secret
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: app-secrets, key: POSTGRES_PASSWORD } }  # Пароль БД из Secret
+            # --- Подключение к брокеру сообщений RabbitMQ (потребитель) ---
+            - name: RABBIT_MQ_HOST
+              valueFrom: { configMapKeyRef: { name: app-config, key: RABBIT_MQ_HOST } }   # Хост RabbitMQ из ConfigMap
+            - name: RABBIT_MQ_PORT
+              valueFrom: { configMapKeyRef: { name: app-config, key: RABBIT_MQ_PORT } }   # Порт RabbitMQ из ConfigMap
+            - name: RABBIT_MQ_QUEUE_NAME
+              valueFrom: { configMapKeyRef: { name: app-config, key: RABBIT_MQ_QUEUE_NAME } }  # Имя очереди для подписки на события
+            - name: RABBIT_MQ_EXCHANGE
+              valueFrom: { configMapKeyRef: { name: app-config, key: RABBIT_MQ_EXCHANGE } }    # Имя exchange для биндинга очереди
+            - name: RABBIT_MQ_USER
+              valueFrom: { secretKeyRef: { name: app-secrets, key: RABBIT_MQ_USER } }     # Логин RabbitMQ из Secret
+            - name: RABBIT_MQ_PASSWORD
+              valueFrom: { secretKeyRef: { name: app-secrets, key: RABBIT_MQ_PASSWORD } } # Пароль RabbitMQ из Secret
+---
+apiVersion: v1                                    # Версия API Kubernetes для Service
+kind: Service                                     # Тип ресурса — Service (сетевая абстракция для Pod'ов)
+metadata:
+  name: report-service                            # Имя сервиса (по нему обращается Gateway для получения отчётов)
+  labels: { app: report-service }                 # Метка сервиса
+spec:
+  selector: { app: report-service }               # Селектор: направляет трафик на Pod'ы с меткой app=report-service
+  ports:
+    - port: 8086                                  # Порт Service (внешний для других Pod'ов)
+      targetPort: 8086                            # Порт контейнера, куда пробрасывается трафик
+  type: ClusterIP                                 # Тип ClusterIP — доступ только внутри кластера
+```
+
+---
+
+# Монолог для защиты (~300 символов)
+
+> Report-service отвечает за сбор и формирование статистики по бронированиям. Он выступает в роли consumer'а сообщений RabbitMQ: подписывается на очередь booking_statistics_queue и асинхронно обрабатывает события, публикуемые Booking-сервисом. Такая событийная модель обеспечивает слабую связанность между сервисами и устойчивость к временной недоступности компонентов. Агрегированные данные сохраняются в собственную БД statistics_db. Через REST API сервис предоставляет отчёты, доступ к которым осуществляется через Gateway. Параметры брокера и БД берутся из ConfigMap и Secret.

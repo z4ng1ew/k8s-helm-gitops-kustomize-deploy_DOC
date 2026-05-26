@@ -58,3 +58,80 @@ spec:
         resources:
           requests:
             storage: 5Gi
+
+
+
+
+
+
+
+# Построчный комментарий к Service и StatefulSet PostgreSQL
+
+```yaml
+apiVersion: v1                                    # Версия API Kubernetes (core/v1) для Service
+kind: Service                                     # Тип ресурса — Service (сетевая абстракция для доступа к Pod'ам)
+metadata:                                         # Метаданные объекта
+  name: postgres                                  # Имя сервиса (по нему другие сервисы обращаются к БД)
+  labels:
+    app: postgres                                 # Метка для идентификации сервиса
+spec:
+  clusterIP: None                                 # Headless Service — без виртуального IP, DNS возвращает IP конкретных Pod'ов (нужно для StatefulSet)
+  selector:
+    app: postgres                                 # Селектор: сервис направляет трафик на Pod'ы с меткой app=postgres
+  ports:
+    - port: 5432                                  # Порт, на котором Service принимает трафик
+      targetPort: 5432                            # Порт контейнера, куда пробрасывается трафик
+---
+apiVersion: apps/v1                               # Версия API для контроллеров приложений
+kind: StatefulSet                                 # StatefulSet — контроллер для stateful-приложений (БД, очереди) со стабильной идентичностью Pod'ов
+metadata:
+  name: postgres                                  # Имя StatefulSet
+  labels:
+    app: postgres                                 # Метка приложения
+spec:
+  serviceName: postgres                           # Имя headless-сервиса, обеспечивающего DNS-идентификацию Pod'ов (postgres-0.postgres)
+  replicas: {{ .Values.replicaCount.postgres }}   # Количество реплик из values.yaml Helm-чарта (шаблонизация)
+  selector:
+    matchLabels:
+      app: postgres                               # Селектор Pod'ов, которыми управляет StatefulSet
+  template:                                       # Шаблон создаваемых Pod'ов
+    metadata:
+      labels:
+        app: postgres                             # Метки Pod'ов (должны совпадать с селектором)
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: k3s-master        # Pod'ы запускаются только на узле k3s-master (там, где находится PV с hostPath)
+      containers:
+        - name: postgres                          # Имя контейнера внутри Pod'а
+          image: {{ .Values.image.postgres }}     # Docker-образ PostgreSQL из values.yaml
+          imagePullPolicy: {{ .Values.image.pullPolicy }}  # Политика загрузки образа (IfNotPresent / Always)
+          ports:
+            - containerPort: 5432                 # Порт, который слушает PostgreSQL внутри контейнера
+          env:                                    # Переменные окружения для инициализации БД
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: app-secrets, key: POSTGRES_USER } }      # Логин БД из Secret
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: app-secrets, key: POSTGRES_PASSWORD } }  # Пароль БД из Secret
+            - name: POSTGRES_DB
+              value: postgres                     # Имя создаваемой по умолчанию базы данных
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata  # Путь хранения данных (поддиректория для совместимости с volumeMount)
+          volumeMounts:
+            - name: postgres-storage              # Монтируемый том (создаётся через volumeClaimTemplates)
+              mountPath: /var/lib/postgresql/data # Точка монтирования в контейнере (стандартная для PostgreSQL)
+  volumeClaimTemplates:                           # Шаблон автоматического создания PVC для каждой реплики StatefulSet
+    - metadata:
+        name: postgres-storage                    # Имя PVC (используется в volumeMounts)
+      spec:
+        accessModes: [ReadWriteOnce]              # Режим доступа: чтение/запись с одного узла
+        storageClassName: manual                  # Класс хранилища — связь с заранее созданным PV
+        resources:
+          requests:
+            storage: 5Gi                          # Запрашиваемый объём — 5Gi (соответствует созданному PV)
+```
+
+---
+
+# Монолог для защиты (~300 символов)
+
+> Для развёртывания PostgreSQL я использовал StatefulSet, поскольку база данных — это stateful-приложение, требующее стабильной сетевой идентичности и постоянного хранилища. Headless Service с clusterIP: None обеспечивает DNS-имена для каждого Pod'а. Через volumeClaimTemplates автоматически создаётся PVC, который связывается с PV на узле k3s-master. Учётные данные пробрасываются из Secret через secretKeyRef, образ и количество реплик параметризованы через Helm values.yaml, что обеспечивает гибкость и переносимость конфигурации.

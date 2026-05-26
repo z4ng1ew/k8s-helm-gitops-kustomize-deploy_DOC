@@ -27,3 +27,47 @@ ingress:
   gatewayHost: gateway.10.174.8.95.nip.io
   tlsSecret: wildcard-nipio-tls
   clusterIssuer: my-ca-issuer
+
+
+
+
+
+# Построчный комментарий к values.yaml
+
+```yaml
+replicaCount:                                     # Раздел с количеством реплик для каждого компонента системы
+  postgres: 1                                     # Одна реплика PostgreSQL (stateful, без репликации БД)
+  rabbitmq: 1                                     # Одна реплика RabbitMQ (без кластеризации брокера)
+  session: 1                                      # Один экземпляр session-service
+  hotel: 1                                        # Один экземпляр hotel-service
+  booking: 1                                      # Один экземпляр booking-service (оркестратор)
+  payment: 1                                      # Один экземпляр payment-service
+  loyalty: 1                                      # Один экземпляр loyalty-service
+  report: 1                                       # Один экземпляр report-service
+  gateway: 2                                      # Две реплики Gateway — обеспечение отказоустойчивости и балансировки нагрузки на точке входа
+
+image:                                            # Раздел с настройками Docker-образов
+  pullPolicy: Never                               # Политика загрузки: Never — использовать только локальные образы (актуально для k3s с локальной сборкой)
+  postgres: src-postgres:latest                   # Кастомный образ PostgreSQL с предустановленными БД (users_db, hotels_db и т.д.)
+  rabbitmq: rabbitmq:3.12-management-alpine       # Официальный образ RabbitMQ версии 3.12 с management plugin на Alpine (минимальный размер)
+  session: src-session-service:latest             # Локально собранный образ session-service
+  hotel: src-hotel-service:latest                 # Локально собранный образ hotel-service
+  booking: src-booking-service:latest             # Локально собранный образ booking-service
+  payment: src-payment-service:latest             # Локально собранный образ payment-service
+  loyalty: src-loyalty-service:latest             # Локально собранный образ loyalty-service
+  report: src-report-service:latest               # Локально собранный образ report-service
+  gateway: src-gateway-service:latest             # Локально собранный образ gateway-service
+
+ingress:                                          # Раздел настроек Ingress
+  enabled: true                                   # Флаг включения Ingress (используется в шаблоне через {{- if .Values.ingress.enabled }})
+  sessionHost: session.10.174.8.95.nip.io         # Публичный домен для session-service (nip.io — wildcard DNS, резолвится в указанный IP без регистрации домена)
+  gatewayHost: gateway.10.174.8.95.nip.io         # Публичный домен для gateway-service
+  tlsSecret: wildcard-nipio-tls                   # Имя Secret'а с TLS-сертификатом (создаётся cert-manager автоматически)
+  clusterIssuer: my-ca-issuer                     # Имя ClusterIssuer cert-manager для выпуска сертификатов (собственный CA)
+```
+
+---
+
+# Монолог для защиты (~300 символов)
+
+> Файл values.yaml содержит все параметризованные значения чарта, что обеспечивает гибкость развёртывания в разных окружениях без изменения шаблонов. Я выделил три ключевых раздела: replicaCount задаёт количество реплик каждого сервиса (Gateway имеет две реплики для отказоустойчивости), image определяет Docker-образы с политикой Never для использования локально собранных образов в k3s, ingress описывает внешние домены с использованием wildcard DNS-сервиса nip.io, что позволяет быстро получать публичные имена без регистрации доменов. TLS-сертификаты выпускаются автоматически через cert-manager и ClusterIssuer my-ca-issuer.
